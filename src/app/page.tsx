@@ -2,12 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
+import type { MindARThree as MindARThreeCtor, Anchor } from "mind-ar/dist/mindar-image-three.prod.js";
 
 export default function ARPage() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
   const [started, setStarted] = useState(false);
   const [unmuted, setUnmuted] = useState(false);
+  const resizeCleanupRef = useRef<(() => void) | null>(null);
 
   // -- Helpers ---------------------------------------------------------------
   const styleFullCover = (el?: HTMLElement | null) => {
@@ -22,9 +24,8 @@ export default function ARPage() {
     el.style.setProperty("max-width", "none", "important");
     el.style.setProperty("max-height", "none", "important");
     el.style.setProperty("transform", "", "important");
-    el.style.setProperty("z-index", isVideo ? "0" : "1", "important"); // <-- niente negativi
+    el.style.setProperty("z-index", isVideo ? "0" : "1", "important");
   };
-  
 
   useEffect(() => {
     // Precarica i video per evitare ritardi
@@ -34,7 +35,7 @@ export default function ARPage() {
     v1.loop = true;
     v1.muted = true;
     v1.playsInline = true;
-    (v1 as any).crossOrigin = "anonymous";
+    v1.crossOrigin = "anonymous";
 
     const v2 = document.createElement("video");
     v2.src = "/videos/video2.mp4";
@@ -42,15 +43,15 @@ export default function ARPage() {
     v2.loop = true;
     v2.muted = true;
     v2.playsInline = true;
-    (v2 as any).crossOrigin = "anonymous";
+    v2.crossOrigin = "anonymous";
 
     const v3 = document.createElement("video");
-     v3.src = "/videos/video3.mp4";
-     v3.preload = "auto";
-     v3.loop = true;
-     v3.muted = true;
-     v3.playsInline = true;
-     (v3 as any).crossOrigin = "anonymous";
+    v3.src = "/videos/video3.mp4";
+    v3.preload = "auto";
+    v3.loop = true;
+    v3.muted = true;
+    v3.playsInline = true;
+    v3.crossOrigin = "anonymous";
 
     if (containerRef.current) {
       v1.style.display = "none";
@@ -73,10 +74,12 @@ export default function ARPage() {
     };
   }, []);
 
-  const startAR = async () => {
+  const startAR = async (): Promise<void> => {
     if (!containerRef.current) return;
 
-    const { MindARThree } = await import("mind-ar/dist/mindar-image-three.prod.js");
+    const { MindARThree } = (await import(
+      "mind-ar/dist/mindar-image-three.prod.js"
+    )) as { MindARThree: typeof MindARThreeCtor };
 
     const mindarThree = new MindARThree({
       container: containerRef.current,
@@ -86,29 +89,26 @@ export default function ARPage() {
       filterBeta: 0.001,
       uiLoading: "yes",
       uiScanning: "yes",
-    } as any);
+    });
 
     const { renderer, scene, camera } = mindarThree;
 
     // Aggancia i video già nel DOM
     const videos = Array.from(
       containerRef.current.querySelectorAll("video")
-      ) as HTMLVideoElement[];
-      const [video1, video2, video3] = videos;
-    
+    ) as HTMLVideoElement[];
+    const [video1, video2, video3] = videos;
 
     // util: crea un piano video con aspect corretto
-    function makeVideoPlane(video: HTMLVideoElement) {
+    function makeVideoPlane(video: HTMLVideoElement): THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial> {
       const tex = new THREE.VideoTexture(video);
-      // Three r150+: tex.colorSpace = THREE.SRGBColorSpace;
-      // Pre-r150: usa encoding
-      (tex as any).encoding = (THREE as any).sRGBEncoding;
+      // Three r150: usa encoding (colorSpace arriva nelle versioni successive)
+      tex.encoding = THREE.sRGBEncoding;
       tex.minFilter = THREE.LinearFilter;
       tex.magFilter = THREE.LinearFilter;
       tex.wrapS = THREE.ClampToEdgeWrapping;
       tex.wrapT = THREE.ClampToEdgeWrapping;
 
-      // Geometria base 1x1, poi la ridimensioniamo appena sappiamo l'aspect reale
       const geo = new THREE.PlaneGeometry(1, 1);
       const mat = new THREE.MeshBasicMaterial({
         map: tex,
@@ -122,7 +122,6 @@ export default function ARPage() {
         const vw = video.videoWidth || 16;
         const vh = video.videoHeight || 9;
         const aspect = vw / vh; // larghezza / altezza del video
-        // vogliamo larghezza=1 unit e altezza=1/aspect per non stirare
         mesh.scale.set(1, 1 / aspect, 1);
       };
 
@@ -137,18 +136,29 @@ export default function ARPage() {
     const plane3 = makeVideoPlane(video3);
 
     // Ancore
-    const anchor0 = mindarThree.addAnchor(0);
+    const anchor0: Anchor = mindarThree.addAnchor(0);
     anchor0.group.add(plane1);
-    const anchor1 = mindarThree.addAnchor(1);
+    const anchor1: Anchor = mindarThree.addAnchor(1);
     anchor1.group.add(plane2);
-    const anchor2 = mindarThree.addAnchor(2);
+    const anchor2: Anchor = mindarThree.addAnchor(2);
     anchor2.group.add(plane3);
 
-    anchor0.onTargetFound = () => { console.log("target 0 found"); video1.play().catch(() => {}); };
+    anchor0.onTargetFound = () => {
+      console.log("target 0 found");
+      void video1.play();
+    };
     anchor0.onTargetLost = () => video1.pause();
-    anchor1.onTargetFound = () => { console.log("target 1 found"); video2.play().catch(() => {}); };
+
+    anchor1.onTargetFound = () => {
+      console.log("target 1 found");
+      void video2.play();
+    };
     anchor1.onTargetLost = () => video2.pause();
-    anchor2.onTargetFound = () => { console.log("target 2 found"); video3.play().catch(() => {}); };
+
+    anchor2.onTargetFound = () => {
+      console.log("target 2 found");
+      void video3.play();
+    };
     anchor2.onTargetLost = () => video3.pause();
 
     // Helper per full screen + cover
@@ -157,14 +167,14 @@ export default function ARPage() {
       const h = window.innerHeight;
       renderer.setSize(w, h, false);
 
-      if ((camera as any).isPerspectiveCamera) {
-        (camera as any).aspect = w / h;
-        (camera as any).updateProjectionMatrix();
+      if (camera instanceof THREE.PerspectiveCamera) {
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
       }
 
-      // Prendi TUTTI i video/canvas nel container (alcune build di MindAR
-      // non aggiungono le classi .mindar-video/.mindar-canvas)
-      const roots = Array.from(containerRef.current?.querySelectorAll("video, canvas") || []);
+      const roots = Array.from(
+        containerRef.current?.querySelectorAll("video, canvas") ?? []
+      );
       roots.forEach((el) => styleFullCover(el as HTMLElement));
     };
 
@@ -174,6 +184,7 @@ export default function ARPage() {
     fitToScreen();
     const onResize = () => fitToScreen();
     window.addEventListener("resize", onResize);
+    resizeCleanupRef.current = () => window.removeEventListener("resize", onResize);
 
     renderer.setAnimationLoop(() => {
       renderer.render(scene, camera);
@@ -183,10 +194,10 @@ export default function ARPage() {
 
     // Sblocco audio dopo primo tap
     const enableAudio = () => {
-            if (!unmuted) {
-              [video1, video2, video3].forEach((v) => {
+      if (!unmuted) {
+        [video1, video2, video3].forEach((v) => {
           v.muted = false;
-          v.play().catch(() => {});
+          void v.play();
         });
         setUnmuted(true);
       }
@@ -195,16 +206,15 @@ export default function ARPage() {
     };
     window.addEventListener("touchend", enableAudio, { once: true });
     window.addEventListener("click", enableAudio, { once: true });
-
-    // cleanup
-    (mindarThree as any)._stopResizeListener = () => window.removeEventListener("resize", onResize);
   };
 
   useEffect(() => {
     return () => {
-      // rimuovi eventuale listener registrato in startAR
-      const stop = (window as any)?._stopResizeListener;
-      if (typeof stop === "function") stop();
+      // cleanup resize listener registrato in startAR
+      if (resizeCleanupRef.current) {
+        resizeCleanupRef.current();
+        resizeCleanupRef.current = null;
+      }
     };
   }, []);
 
@@ -214,15 +224,13 @@ export default function ARPage() {
         ref={containerRef}
         data-mindar-container
         className="w-full h-[100svh] relative overflow-hidden container"
-        style={{
-          touchAction: "manipulation",
-        }}
+        style={{ touchAction: "manipulation" }}
       >
         {!started && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-gradient-to-b from-black/70 to-black/40 backdrop-blur-sm info-box">
             <h1 className="text-2xl font-semibold">AR-OVERLAY</h1>
             <p className="text-center opacity-80 px-6 max-w-md">
-              inquadra una foto. <br/> al riconoscimento, partirà il video corrispondente.
+              inquadra una foto. <br /> al riconoscimento, partirà il video corrispondente.
             </p>
             <button
               onClick={startAR}
@@ -231,9 +239,12 @@ export default function ARPage() {
             >
               {ready ? "open" : "Inizializzo..."}
             </button>
-            <br/>
+            <br />
             <p className="text-center opacity-80 px-6 max-w-md link">
-              powered by<a href="https://antonioamodio.vercel.app/" about="_blank"> antonioamodio.it </a>
+              powered by{" "}
+              <a href="https://antonioamodio.vercel.app/" target="_blank" rel="noreferrer">
+                antonioamodio.it
+              </a>
             </p>
           </div>
         )}
