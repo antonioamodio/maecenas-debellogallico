@@ -41,6 +41,7 @@ export default function ARPage() {
     v.setAttribute("playsinline", "");
     v.crossOrigin = "anonymous";
 
+    
     // Non usare display:none: lo teniamo fuori schermo
     v.style.visibility = "hidden";
     v.style.position = "absolute";
