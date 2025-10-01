@@ -114,7 +114,18 @@ export default function ARPage() {
       tex.wrapT = THREE.ClampToEdgeWrapping;
 
       // Three r150+:
-      (renderer as any).outputColorSpace = THREE.SRGBColorSpace;
+      type RendererWithColorSpace = THREE.WebGLRenderer & Partial<{
+        outputColorSpace: THREE.ColorSpace;
+        outputEncoding: THREE.TextureEncoding;
+      }>;
+
+      const r = renderer as RendererWithColorSpace;
+      if (r.outputColorSpace !== undefined) {
+        r.outputColorSpace = THREE.SRGBColorSpace;
+      } else if (r.outputEncoding !== undefined) {
+        r.outputEncoding = THREE.sRGBEncoding;
+      }
+
 
       const geo = new THREE.PlaneGeometry(1, 1);
       const mat = new THREE.MeshBasicMaterial({
