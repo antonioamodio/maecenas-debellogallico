@@ -3,6 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 
+declare global {
+  interface Window {
+    _stopResizeListener?: () => void;
+  }
+}
+
 export default function ARPage() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
@@ -22,54 +28,57 @@ export default function ARPage() {
     el.style.setProperty("max-width", "none", "important");
     el.style.setProperty("max-height", "none", "important");
     el.style.setProperty("transform", "", "important");
-    el.style.setProperty("z-index", isVideo ? "0" : "1", "important"); // <-- niente negativi
+    el.style.setProperty("z-index", isVideo ? "0" : "1", "important");
   };
-  
+
+  // Prepara un <video> e attende che sia pronto a riprodurre
+  function createAndPrepVideo(src: string) {
+    const v = document.createElement("video");
+    v.src = src;
+    v.preload = "auto";
+    v.loop = true;
+    v.muted = true;
+    v.playsInline = true;
+    v.setAttribute("playsinline", "");
+    v.crossOrigin = "anonymous";
+
+    // Non usare display:none: lo teniamo fuori schermo
+    v.style.visibility = "hidden";
+    v.style.position = "absolute";
+    v.style.left = "-9999px";
+    v.style.top = "0";
+    v.style.width = "1px";
+    v.style.height = "1px";
+
+    const ready = new Promise<void>((resolve) => {
+      if (v.readyState >= 2) return resolve();
+      const onReady = () => resolve();
+      v.addEventListener("canplay", onReady, { once: true });
+      v.addEventListener("loadedmetadata", onReady, { once: true });
+      v.load();
+    });
+
+    return { v, ready };
+  }
 
   useEffect(() => {
-    // Precarica i video per evitare ritardi
-    const v1 = document.createElement("video");
-    v1.src = "/videos/video1.mp4";
-    v1.preload = "auto";
-    v1.loop = true;
-    v1.muted = true;
-    v1.playsInline = true;
-    v1.crossOrigin = "anonymous";
+    if (!containerRef.current) return;
 
-    const v2 = document.createElement("video");
-    v2.src = "/videos/video2.mp4";
-    v2.preload = "auto";
-    v2.loop = true;
-    v2.muted = true;
-    v2.playsInline = true;
-    v2.crossOrigin = "anonymous";
+    // Crea e prepara i video
+    const { v: v1, ready: r1 } = createAndPrepVideo("/videos/video1.mp4");
+    const { v: v2, ready: r2 } = createAndPrepVideo("/videos/video2.mp4");
+    const { v: v3, ready: r3 } = createAndPrepVideo("/videos/video3.mp4");
 
-    const v3 = document.createElement("video");
-     v3.src = "/videos/video3.mp4";
-     v3.preload = "auto";
-     v3.loop = true;
-     v3.muted = true;
-     v3.playsInline = true;
-     v3.crossOrigin = "anonymous";
+    containerRef.current.appendChild(v1);
+    containerRef.current.appendChild(v2);
+    containerRef.current.appendChild(v3);
 
-    if (containerRef.current) {
-      v1.style.display = "none";
-      v2.style.display = "none";
-      v3.style.display = "none";
-      containerRef.current.appendChild(v1);
-      containerRef.current.appendChild(v2);
-      containerRef.current.appendChild(v3);
-    }
-
-    setReady(true);
+    // Quando tutti i video sono caricabili, abilita lo start
+    Promise.all([r1, r2, r3]).then(() => setReady(true));
 
     return () => {
-      v1.pause();
-      v2.pause();
-      v3.pause();
-      v1.remove();
-      v2.remove();
-      v3.remove();
+      v1.pause(); v2.pause(); v3.pause();
+      v1.remove(); v2.remove(); v3.remove();
     };
   }, []);
 
@@ -80,7 +89,7 @@ export default function ARPage() {
 
     const mindarThree = new MindARThree({
       container: containerRef.current,
-      imageTargetSrc: "/targets/targets.mind",
+      imageTargetSrc: "/targets/targets.mind", // assicurati che esista in /public/targets
       maxTrack: 1,
       filterMinCF: 0.0001,
       filterBeta: 0.001,
@@ -93,22 +102,20 @@ export default function ARPage() {
     // Aggancia i video già nel DOM
     const videos = Array.from(
       containerRef.current.querySelectorAll("video")
-      ) as HTMLVideoElement[];
-      const [video1, video2, video3] = videos;
-    
+    ) as HTMLVideoElement[];
+    const [video1, video2, video3] = videos;
 
-    // util: crea un piano video con aspect corretto
     function makeVideoPlane(video: HTMLVideoElement) {
       const tex = new THREE.VideoTexture(video);
-      // Three r150+: tex.colorSpace = THREE.SRGBColorSpace;
-      // Pre-r150: usa encoding
       (tex as THREE.VideoTexture).colorSpace = THREE.SRGBColorSpace;
       tex.minFilter = THREE.LinearFilter;
       tex.magFilter = THREE.LinearFilter;
       tex.wrapS = THREE.ClampToEdgeWrapping;
       tex.wrapT = THREE.ClampToEdgeWrapping;
 
-      // Geometria base 1x1, poi la ridimensioniamo appena sappiamo l'aspect reale
+      // Three r150+:
+      (renderer as any).outputColorSpace = THREE.SRGBColorSpace;
+
       const geo = new THREE.PlaneGeometry(1, 1);
       const mat = new THREE.MeshBasicMaterial({
         map: tex,
@@ -121,8 +128,7 @@ export default function ARPage() {
       const applyAspect = () => {
         const vw = video.videoWidth || 16;
         const vh = video.videoHeight || 9;
-        const aspect = vw / vh; // larghezza / altezza del video
-        // vogliamo larghezza=1 unit e altezza=1/aspect per non stirare
+        const aspect = vw / vh;
         mesh.scale.set(1, 1 / aspect, 1);
       };
 
@@ -144,36 +150,45 @@ export default function ARPage() {
     const anchor2 = mindarThree.addAnchor(2);
     anchor2.group.add(plane3);
 
-    anchor0.onTargetFound = () => { console.log("target 0 found"); video1.play().catch(() => {}); };
+    // Play sicuro con catch (se fallisce, log utile in prod)
+    anchor0.onTargetFound = async () => {
+      try { await video1.play(); } catch (e) { console.warn("v1 play failed", e); }
+    };
     anchor0.onTargetLost = () => video1.pause();
-    anchor1.onTargetFound = () => { console.log("target 1 found"); video2.play().catch(() => {}); };
+
+    anchor1.onTargetFound = async () => {
+      try { await video2.play(); } catch (e) { console.warn("v2 play failed", e); }
+    };
     anchor1.onTargetLost = () => video2.pause();
-    anchor2.onTargetFound = () => { console.log("target 2 found"); video3.play().catch(() => {}); };
+
+    anchor2.onTargetFound = async () => {
+      try { await video3.play(); } catch (e) { console.warn("v3 play failed", e); }
+    };
     anchor2.onTargetLost = () => video3.pause();
 
-    // Helper per full screen + cover
+    // Layout / resize
     const fitToScreen = () => {
       const w = window.innerWidth;
       const h = window.innerHeight;
       renderer.setSize(w, h, false);
 
       if (camera instanceof THREE.PerspectiveCamera) {
-           camera.aspect = w / h;
-           camera.updateProjectionMatrix();
-         }
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+      }
 
-      // Prendi TUTTI i video/canvas nel container (alcune build di MindAR
-      // non aggiungono le classi .mindar-video/.mindar-canvas)
-      const roots = Array.from(containerRef.current?.querySelectorAll("video, canvas") || []);
+      const roots = Array.from(
+        containerRef.current?.querySelectorAll("video, canvas") || []
+      );
       roots.forEach((el) => styleFullCover(el as HTMLElement));
     };
 
     await mindarThree.start();
 
-    // Applica subito e lega al resize
     fitToScreen();
     const onResize = () => fitToScreen();
     window.addEventListener("resize", onResize);
+    window._stopResizeListener = () => window.removeEventListener("resize", onResize);
 
     renderer.setAnimationLoop(() => {
       renderer.render(scene, camera);
@@ -181,13 +196,13 @@ export default function ARPage() {
 
     setStarted(true);
 
-    // Sblocco audio dopo primo tap
-    const enableAudio = () => {
-            if (!unmuted) {
-              [video1, video2, video3].forEach((v) => {
-          v.muted = false;
-          v.play().catch(() => {});
-        });
+    // Sblocco audio dopo primo gesto
+    const enableAudio = async () => {
+      if (!unmuted) {
+        [video1, video2, video3].forEach((v) => (v.muted = false));
+        try { await video1.play(); } catch {}
+        try { await video2.play(); } catch {}
+        try { await video3.play(); } catch {}
         setUnmuted(true);
       }
       window.removeEventListener("touchend", enableAudio);
@@ -195,14 +210,10 @@ export default function ARPage() {
     };
     window.addEventListener("touchend", enableAudio, { once: true });
     window.addEventListener("click", enableAudio, { once: true });
-
-    // cleanup
-    window._stopResizeListener = () => window.removeEventListener("resize", onResize);
   };
 
   useEffect(() => {
     return () => {
-      // rimuovi eventuale listener registrato in startAR
       const stop = window._stopResizeListener;
       if (typeof stop === "function") stop();
     };
@@ -214,15 +225,13 @@ export default function ARPage() {
         ref={containerRef}
         data-mindar-container
         className="w-full h-[100svh] relative overflow-hidden container"
-        style={{
-          touchAction: "manipulation",
-        }}
+        style={{ touchAction: "manipulation" }}
       >
         {!started && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-gradient-to-b from-black/70 to-black/40 backdrop-blur-sm info-box">
             <h1 className="text-2xl font-semibold">AR-OVERLAY</h1>
             <p className="text-center opacity-80 px-6 max-w-md">
-              inquadra una foto. <br/> al riconoscimento, partirà il video corrispondente.
+              Inquadra una foto. <br /> Al riconoscimento partirà il video corrispondente.
             </p>
             <button
               onClick={startAR}
@@ -231,9 +240,12 @@ export default function ARPage() {
             >
               {ready ? "open" : "Inizializzo..."}
             </button>
-            <br/>
+            <br />
             <p className="text-center opacity-80 px-6 max-w-md link">
-              powered by<a href="https://antonioamodio.vercel.app/" about="_blank"> antonioamodio.it </a>
+              powered by{" "}
+              <a href="https://antonioamodio.vercel.app/" target="_blank" rel="noreferrer">
+                antonioamodio.it
+              </a>
             </p>
           </div>
         )}
@@ -241,7 +253,6 @@ export default function ARPage() {
 
       {/* Stili globali per il layer MindAR (fallback) */}
       <style jsx global>{`
-        /* Il canvas deve stare sopra al video */
         [data-mindar-container] video {
           position: absolute !important;
           inset: 0 !important;
