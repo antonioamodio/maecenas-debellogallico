@@ -240,13 +240,7 @@ export default function ARPage() {
             >
               {ready ? "open" : "Inizializzo..."}
             </button>
-            <br />
-            <p className="text-center opacity-80 px-6 max-w-md link">
-              powered by{" "}
-              <a href="https://antonioamodio.vercel.app/" target="_blank" rel="noreferrer">
-                antonioamodio.it
-              </a>
-            </p>
+
           </div>
         )}
       </div>
