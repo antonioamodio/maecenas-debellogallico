@@ -15,7 +15,6 @@ export default function ARPage() {
   const [started, setStarted] = useState(false);
   const [unmuted, setUnmuted] = useState(false);
 
-  // -- Helpers ---------------------------------------------------------------
   const styleFullCover = (el?: HTMLElement | null) => {
     if (!el) return;
     const isVideo = el.tagName.toLowerCase() === "video";
