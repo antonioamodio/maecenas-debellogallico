@@ -11,6 +11,7 @@ declare global {
 
 export default function ARPage() {
   const containerRef = useRef<HTMLDivElement>(null);
+  const videosRef = useRef<HTMLVideoElement[]>([]); // <-- ref STABILE ai 3 video
   const [ready, setReady] = useState(false);
   const [started, setStarted] = useState(false);
   const [unmuted, setUnmuted] = useState(false);
@@ -41,7 +42,9 @@ export default function ARPage() {
     v.setAttribute("playsinline", "");
     v.crossOrigin = "anonymous";
 
-    
+    // Etichetta per distinguerli dal video della camera
+    v.setAttribute("data-ar-video", src);
+
     // Non usare display:none: lo teniamo fuori schermo
     v.style.visibility = "hidden";
     v.style.position = "absolute";
@@ -73,6 +76,9 @@ export default function ARPage() {
     containerRef.current.appendChild(v2);
     containerRef.current.appendChild(v3);
 
+    // Salva riferimenti stabili
+    videosRef.current = [v1, v2, v3];
+
     // Quando tutti i video sono caricabili, abilita lo start
     Promise.all([r1, r2, r3]).then(() => setReady(true));
 
@@ -99,11 +105,8 @@ export default function ARPage() {
 
     const { renderer, scene, camera } = mindarThree;
 
-    // Aggancia i video già nel DOM
-    const videos = Array.from(
-      containerRef.current.querySelectorAll("video")
-    ) as HTMLVideoElement[];
-    const [video1, video2, video3] = videos;
+    // Usa i nostri video (NON il video della camera aggiunto da MindAR)
+    const [video1, video2, video3] = videosRef.current;
 
     function makeVideoPlane(video: HTMLVideoElement) {
       const tex = new THREE.VideoTexture(video);
@@ -113,7 +116,7 @@ export default function ARPage() {
       tex.wrapS = THREE.ClampToEdgeWrapping;
       tex.wrapT = THREE.ClampToEdgeWrapping;
 
-      // Three r150+:
+      // Three r150+
       type RendererWithColorSpace = THREE.WebGLRenderer & Partial<{
         outputColorSpace: THREE.ColorSpace;
         outputEncoding: THREE.TextureEncoding;
@@ -125,7 +128,6 @@ export default function ARPage() {
       } else if (r.outputEncoding !== undefined) {
         r.outputEncoding = THREE.sRGBEncoding;
       }
-
 
       const geo = new THREE.PlaneGeometry(1, 1);
       const mat = new THREE.MeshBasicMaterial({
@@ -188,8 +190,9 @@ export default function ARPage() {
         camera.updateProjectionMatrix();
       }
 
+      // Applica full-cover a canvas + video camera (esclude i nostri video off-screen)
       const roots = Array.from(
-        containerRef.current?.querySelectorAll("video, canvas") || []
+        containerRef.current?.querySelectorAll("canvas, video:not([data-ar-video])") || []
       );
       roots.forEach((el) => styleFullCover(el as HTMLElement));
     };
@@ -251,14 +254,14 @@ export default function ARPage() {
             >
               {ready ? "open" : "Inizializzo..."}
             </button>
-
           </div>
         )}
       </div>
 
       {/* Stili globali per il layer MindAR (fallback) */}
       <style jsx global>{`
-        [data-mindar-container] video {
+        /* Applica gli stili solo al video della camera (non ai nostri con data-ar-video) */
+        [data-mindar-container] video:not([data-ar-video]) {
           position: absolute !important;
           inset: 0 !important;
           width: 100% !important;
