@@ -1,4 +1,52 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+## Maecenas — Debello Gallico AR
+
+Esperienza AR basata su Next.js, MindAR e Three.js che proietta tre video indipendenti sui target stampati dell&apos;opera *Debello Gallico*. L&apos;interfaccia è ottimizzata mobile-first e fornisce feedback in tempo reale (preparazione → scansione → tracking).
+
+### Requisiti
+
+- Node.js 20.x (come da `package.json`)
+- Target MindAR compilato (`/public/targets/targets.mind`)
+- Tre video MP4 posizionati in `/public/videos/video{1,2,3}.mp4` (stesso ordine dei target)
+
+### Avvio in locale
+
+```bash
+npm install
+npm run dev
+```
+
+Apri [http://localhost:3000](http://localhost:3000) da un dispositivo con fotocamera. Il pulsante “Avvia esperienza” compare quando tutti i video sono stati precaricati.
+
+### Flusso utente
+
+1. **Preparazione** – i video vengono caricati fuori campo per garantire un avvio immediato e l&apos;UI mostra l&apos;avanzamento.
+2. **Scansione** – la fotocamera viene ridimensionata dinamicamente e la HUD guida l&apos;utente nel framing ottimale.
+3. **Tracking** – quando il target è agganciato, il video corrispondente viene riprodotto sopra l&apos;immagine con smoothing dei movimenti e gestione audio (tap per sbloccare).
+
+Il sistema ritorna automaticamente in modalità Recupero → Scansione se il target va perso.
+
+### Suggerimenti di tracking
+
+- Usa stampe A4 in condizioni di luce diffusa; evita riflessi diretti.
+- Mantieni il dispositivo parallelo al target durante l&apos;aggancio.
+- I parametri MindAR sono ottimizzati per stabilità (`filterMinCF`, `filterBeta`, `warmupTolerance`, `missTolerance`) e un ulteriore smoothing viene applicato via Three.js per ridurre jitter e ghosting.
+
+### Build
+
+```bash
+npm run build
+npm run start
+```
+
+L&apos;export statico è supportato tramite `npm run export` (cartella `out/`).
+
+### Linting
+
+```bash
+npm run lint
+```
+
+L&apos;ESLint è configurato con le regole `next/core-web-vitals` e ignora gli script di build custom nella cartella `scripts/`.
 
 ## Getting Started
 

@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "export": "next export"
   },
   "dependencies": {
     "mind-ar": "^1.2.5",
@@ -23,7 +24,12 @@
     "@types/three": "^0.160.0",
     "eslint": "^9",
     "eslint-config-next": "15.5.4",
+    "fs-extra": "^11.3.2",
+    "glob": "^11.0.3",
+    "javascript-obfuscator": "^4.1.1",
     "typescript": "^5"
   },
-  "engines": { "node": "20.x" }
+  "engines": {
+    "node": "20.x"
+  }
 }
