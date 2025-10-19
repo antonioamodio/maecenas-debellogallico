@@ -289,9 +289,12 @@ export default function ARPage() {
       const runtime = mindarRuntimeRef.current;
       mindarRuntimeRef.current = null;
       if (runtime) {
-        runtime.cleanup().catch((cleanupError) => {
-          console.warn("Errore in fase di cleanup MindAR", cleanupError);
-        });
+        const result = runtime.cleanup();
+        if (result instanceof Promise) {
+          result.catch((cleanupError) => {
+            console.warn("Errore in fase di cleanup MindAR", cleanupError);
+          });
+        }
       }
     };
   }, []);
@@ -473,7 +476,7 @@ export default function ARPage() {
       window.addEventListener("click", gestureHandler, { once: true });
 
       mindarRuntimeRef.current = {
-        mindarThree,
+        mindarThree: mindarThree!,
         renderer: renderer!,
         cleanup: async () => {
           renderer!.setAnimationLoop(null);
@@ -486,7 +489,7 @@ export default function ARPage() {
           });
           trackedEntriesRef.current = [];
           try {
-            await mindarThree.stop();
+            await mindarThree!.stop();
           } catch (stopError) {
             console.warn("Errore arrestando MindAR", stopError);
           }
@@ -494,11 +497,13 @@ export default function ARPage() {
       };
     } catch (err) {
       if (mindarThree) {
+        const instance = mindarThree;
         try {
-          await mindarThree.stop();
+          await instance.stop();
         } catch (stopError) {
           console.warn("MindAR stop fallito dopo errore", stopError);
         }
+        mindarThree = null;
       }
       trackedEntriesRef.current.forEach((entry) => {
         entry.anchor.group.remove(entry.plane.mesh);
